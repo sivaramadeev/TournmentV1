@@ -13,32 +13,36 @@ import PublicTournamentList from './components/PublicTournamentList';
 export type View = 'player' | 'admin' | 'login';
 
 const App: React.FC = () => {
-    // We now store an array of tournaments. 
-    // Using a new key 'tournamentServiceData' to avoid conflicts with previous single-tournament versions.
+    // Store array of tournaments in local storage
     const [tournaments, setTournaments] = useLocalStorage<Tournament[]>('tournamentServiceData', []);
     
     const [isAdminLoggedIn, setIsAdminLoggedIn] = useLocalStorage<boolean>('isAdminLoggedIn', false);
     const [currentView, setCurrentView] = useState<View>('player');
     
-    // ID of the tournament currently being viewed/edited. Null implies viewing the list.
-    const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+    // FIX: Persist the active tournament ID so refresh doesn't kick user back to list
+    const [activeTournamentId, setActiveTournamentId] = useLocalStorage<string | null>('activeTournamentId', null);
     
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Ensure tournaments is always an array (recovers from potential corrupted storage)
+        if (!Array.isArray(tournaments)) {
+            setTournaments([]);
+        }
+        
         if (isAdminLoggedIn) {
             setCurrentView('admin');
         } else {
             setCurrentView('player');
         }
         setLoading(false);
-    }, [isAdminLoggedIn]);
+    }, [isAdminLoggedIn, tournaments, setTournaments]);
 
     const handleLogin = useCallback((user: string, pass: string): boolean => {
         if (user === ADMIN_USERNAME && pass === ADMIN_PASSWORD) {
             setIsAdminLoggedIn(true);
             setCurrentView('admin');
-            setActiveTournamentId(null); // Reset to list view on fresh login
+            // Don't reset activeTournamentId here, so if they logged in previously and refreshed, they stay put.
             return true;
         }
         return false;
@@ -48,7 +52,7 @@ const App: React.FC = () => {
         setIsAdminLoggedIn(false);
         setCurrentView('login');
         setActiveTournamentId(null);
-    }, [setIsAdminLoggedIn]);
+    }, [setIsAdminLoggedIn, setActiveTournamentId]);
 
     const createNewTournament = (name: string) => {
         const newTournament: Tournament = {
@@ -61,7 +65,6 @@ const App: React.FC = () => {
             }
         };
         setTournaments(prev => [...prev, newTournament]);
-        // Automatically open the new tournament
         setActiveTournamentId(newTournament.id);
     };
 
@@ -71,9 +74,12 @@ const App: React.FC = () => {
             if (activeTournamentId === id) setActiveTournamentId(null);
         }
     };
+    
+    const handleImportTournaments = (importedData: Tournament[]) => {
+        setTournaments(importedData);
+        alert('Data restored successfully!');
+    };
 
-    // This wrapper mimics the React.Dispatch<SetStateAction<Tournament>> signature 
-    // expected by the child components, but internally updates the specific tournament in the main array.
     const handleUpdateActiveTournament = (
         value: Tournament | ((prev: Tournament) => Tournament)
     ) => {
@@ -97,7 +103,7 @@ const App: React.FC = () => {
             return <div className="text-center p-10">Loading Application...</div>;
         }
 
-        const activeTournament = tournaments.find(t => t.id === activeTournamentId);
+        const activeTournament = Array.isArray(tournaments) ? tournaments.find(t => t.id === activeTournamentId) : null;
 
         switch (currentView) {
             case 'login':
@@ -120,6 +126,7 @@ const App: React.FC = () => {
                             onCreate={createNewTournament}
                             onSelect={setActiveTournamentId}
                             onDelete={deleteTournament}
+                            onImport={handleImportTournaments}
                         />
                     );
                 }
@@ -144,7 +151,9 @@ const App: React.FC = () => {
         }
     };
 
-    const currentStatus = activeTournamentId && tournaments.find(t => t.id === activeTournamentId)?.status || 'Draft';
+    const currentStatus = activeTournamentId && Array.isArray(tournaments) 
+        ? tournaments.find(t => t.id === activeTournamentId)?.status || 'Draft' 
+        : 'Draft';
 
     return (
         <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
@@ -152,12 +161,11 @@ const App: React.FC = () => {
                 currentView={currentView}
                 setCurrentView={(view) => {
                     setCurrentView(view);
-                    // When switching main views, reset to the list (Hub)
                     setActiveTournamentId(null);
                 }}
                 isAdminLoggedIn={isAdminLoggedIn}
                 onLogout={handleLogout}
-                tournamentStatus={currentStatus} // Only relevant if activeTournamentId is set, but Header handles display logic
+                tournamentStatus={currentStatus}
             />
             <main className="container mx-auto p-4 md:p-6 lg:p-8">
                 {renderContent()}

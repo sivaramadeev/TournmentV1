@@ -8,9 +8,10 @@ interface AdminTournamentListProps {
     onCreate: (name: string) => void;
     onSelect: (id: string) => void;
     onDelete: (id: string) => void;
+    onImport: (data: Tournament[]) => void;
 }
 
-const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, onCreate, onSelect, onDelete }) => {
+const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, onCreate, onSelect, onDelete, onImport }) => {
     const [isCreating, setIsCreating] = useState(false);
     const [newTournamentName, setNewTournamentName] = useState('');
 
@@ -23,16 +24,73 @@ const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, 
         }
     };
 
+    const handleExportAll = () => {
+        const dataStr = JSON.stringify(tournaments, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `tournament_manager_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleImportClick = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const json = JSON.parse(event.target?.result as string);
+                    if (Array.isArray(json)) {
+                        if (window.confirm(`This will overwrite all current data with ${json.length} tournaments from the backup. Are you sure?`)) {
+                            onImport(json);
+                        }
+                    } else {
+                        alert('Invalid backup file format.');
+                    }
+                } catch (err) {
+                    alert('Failed to parse JSON file.');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    };
+
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <h2 className="text-3xl font-bold text-white">Your Tournaments</h2>
-                <button
-                    onClick={() => setIsCreating(true)}
-                    className="px-4 py-2 bg-brand-primary hover:bg-brand-secondary text-white rounded-md font-medium transition-colors"
-                >
-                    + Create New Tournament
-                </button>
+                <div className="flex gap-3">
+                     <button
+                        onClick={handleExportAll}
+                        className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-md font-medium transition-colors text-sm border border-gray-600"
+                        title="Download a backup of all tournament data"
+                    >
+                        ⬇ Backup Data
+                    </button>
+                    <button
+                        onClick={handleImportClick}
+                        className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-md font-medium transition-colors text-sm border border-gray-600"
+                        title="Restore data from a backup file"
+                    >
+                        ⬆ Restore Data
+                    </button>
+                    <button
+                        onClick={() => setIsCreating(true)}
+                        className="px-4 py-2 bg-brand-primary hover:bg-brand-secondary text-white rounded-md font-medium transition-colors"
+                    >
+                        + Create New Tournament
+                    </button>
+                </div>
             </div>
 
             {isCreating && (
@@ -56,7 +114,8 @@ const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {tournaments.length === 0 ? (
                     <div className="col-span-full text-center p-12 bg-gray-800/50 rounded-lg border border-gray-700 border-dashed">
-                        <p className="text-gray-400 text-lg">No tournaments found. Create one to get started!</p>
+                        <p className="text-gray-400 text-lg mb-4">No tournaments found.</p>
+                        <p className="text-sm text-gray-500">Create a new one or Import a backup file to get started.</p>
                     </div>
                 ) : (
                     tournaments.map(t => (

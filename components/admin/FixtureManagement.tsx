@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Tournament, MatchStatus, Match, MatchHistoryEntry, Player } from '../../types';
-import { HistoryIcon } from '../icons';
+import { HistoryIcon, DeleteIcon, CheckCircleIcon } from '../icons';
 
 interface FixtureManagementProps {
     tournament: Tournament;
@@ -40,43 +40,67 @@ const FixtureManagement: React.FC<FixtureManagementProps> = ({ tournament, setTo
 
     const playerMap = useMemo(() => new Map(tournament.players.map(p => [p.id, p])), [tournament.players]);
 
+    const existingFixture = useMemo(() => {
+        return tournament.fixtures.find(f => f.category === selectedCategory && f.type === selectedType);
+    }, [tournament.fixtures, selectedCategory, selectedType]);
+
     const handleGenerateFixtures = () => {
         if (!selectedCategory || !selectedType) {
             alert('Please select a category and type to generate fixtures.');
             return;
         }
 
-        const playersInCategory = tournament.players.filter(p => p.categories.includes(selectedCategory));
-        if (playersInCategory.length < 4) {
-            alert('A minimum of 4 players is required in a category to generate fixtures.');
-            return;
-        }
-
-        let shuffledPlayers = [...playersInCategory].sort(() => 0.5 - Math.random());
-        const groups: { name: string, players: Player[] }[] = [];
-        let groupIndex = 1;
-
-        while (shuffledPlayers.length >= 4) {
-            let groupSize = Math.min(6, shuffledPlayers.length);
-            if (shuffledPlayers.length - groupSize > 0 && shuffledPlayers.length - groupSize < 4) {
-                if (shuffledPlayers.length === 7) groupSize = 4; // 4 + 3
-                else if (shuffledPlayers.length === 8) groupSize = 4; // 4 + 4
-                else if (shuffledPlayers.length === 9) groupSize = 5; // 5 + 4
-                else if (shuffledPlayers.length === 10) groupSize = 5; // 5 + 5
-                else if (shuffledPlayers.length === 11) groupSize = 5; // 5 + 6
-                else groupSize = 6;
+        if (existingFixture) {
+            if (!window.confirm(`Fixtures already exist for ${selectedCategory} - ${selectedType}. \n\nWARNING: Regenerating will DELETE all existing matches and scores for this category. \n\nDo you want to continue?`)) {
+                return;
             }
-            if (shuffledPlayers.length < groupSize) break;
-            
-            groups.push({
-                name: `Group ${groupIndex++}`,
-                players: shuffledPlayers.splice(0, groupSize),
-            });
         }
+
+        const playersInCategory = tournament.players.filter(p => p.categories.includes(selectedCategory));
         
-        if (shuffledPlayers.length > 0) {
-            alert(`Could not form a valid group for the remaining ${shuffledPlayers.length} players. Please adjust player count.`);
+        if (playersInCategory.length < 4) {
+            alert(`Insufficient players. Found ${playersInCategory.length}, but minimum 4 are required.`);
             return;
+        }
+
+        // Shuffle players for randomness
+        let shuffledPlayers = [...playersInCategory].sort(() => 0.5 - Math.random());
+        const totalPlayers = shuffledPlayers.length;
+
+        // DISTRIBUTE PLAYERS EVENLY
+        // Constraint: Groups must be between 4 and 6 players.
+        const minGroupSize = 4;
+        const maxGroupSize = 6;
+        
+        // Calculate range of possible group counts
+        const minGroups = Math.ceil(totalPlayers / maxGroupSize);
+        const maxGroups = Math.floor(totalPlayers / minGroupSize);
+
+        if (minGroups > maxGroups) {
+            // This happens for numbers like 1, 2, 3, 7 (where 4+3 is invalid)
+            alert(`Cannot evenly distribute ${totalPlayers} players into groups of size 4 to 6. Please add or remove players.`);
+            return;
+        }
+
+        // We prefer smaller groups (more groups) to keep round-robins shorter, or maximize participation?
+        // Usually maximizing number of groups keeps group size smaller (closer to 4 or 5), which is often better for scheduling.
+        const numGroups = maxGroups; 
+        const baseSize = Math.floor(totalPlayers / numGroups);
+        const remainder = totalPlayers % numGroups;
+
+        const groups: { name: string, players: Player[] }[] = [];
+        let startIndex = 0;
+
+        for (let i = 0; i < numGroups; i++) {
+            // Distribute the remainder one by one to the first few groups
+            const size = i < remainder ? baseSize + 1 : baseSize;
+            const groupPlayers = shuffledPlayers.slice(startIndex, startIndex + size);
+            startIndex += size;
+
+            groups.push({
+                name: `Group ${String.fromCharCode(65 + i)}`, // Group A, B, C...
+                players: groupPlayers,
+            });
         }
 
         const newCategoryFixture = {
@@ -84,10 +108,11 @@ const FixtureManagement: React.FC<FixtureManagementProps> = ({ tournament, setTo
             type: selectedType,
             groups: groups.map(group => {
                 const matches: Match[] = [];
+                // Round Robin Logic
                 for (let i = 0; i < group.players.length; i++) {
                     for (let j = i + 1; j < group.players.length; j++) {
                         matches.push({
-                            id: `match-${Date.now()}-${i}-${j}`,
+                            id: `match-${Date.now()}-${group.name}-${i}-${j}`,
                             player1Id: group.players[i].id,
                             player2Id: group.players[j].id,
                             scoreP1: null,
@@ -107,7 +132,18 @@ const FixtureManagement: React.FC<FixtureManagementProps> = ({ tournament, setTo
         });
     };
     
-     const handleJsonUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleDeleteFixtures = () => {
+        if (!existingFixture) return;
+        if (window.confirm(`Are you sure you want to delete fixtures for ${selectedCategory} - ${selectedType}? This cannot be undone.`)) {
+            setTournament(prev => ({
+                ...prev,
+                fixtures: prev.fixtures.filter(f => !(f.category === selectedCategory && f.type === selectedType))
+            }));
+            alert('Fixtures deleted.');
+        }
+    };
+
+    const handleJsonUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -128,14 +164,12 @@ const FixtureManagement: React.FC<FixtureManagementProps> = ({ tournament, setTo
 
     const updateMatch = (matchId: string, updates: Partial<Match>, reason: string) => {
         setTournament(prev => {
-            let oldMatch: Match | undefined;
             const newFixtures = prev.fixtures.map(f => ({
                 ...f,
                 groups: f.groups.map(g => ({
                     ...g,
                     matches: g.matches.map(m => {
                         if (m.id === matchId) {
-                            oldMatch = { ...m };
                             const newHistoryEntry: MatchHistoryEntry = {
                                 timestamp: new Date().toISOString(),
                                 changedBy: 'admin',
@@ -184,72 +218,145 @@ const FixtureManagement: React.FC<FixtureManagementProps> = ({ tournament, setTo
         <div className="bg-gray-800 p-6 rounded-lg shadow-lg space-y-6">
             <h2 className="text-xl font-bold">3. Fixture & Score Management</h2>
 
-            <div className="p-4 border border-gray-700 rounded-md space-y-4">
-                 <h3 className="font-semibold">Generate/Upload Fixtures</h3>
-                 <div className="grid md:grid-cols-3 gap-4">
-                    <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md">
-                        <option value="">-- Select Category --</option>
-                        {tournament.settings.categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                     <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md">
-                        <option value="">-- Select Type --</option>
-                        {tournament.settings.types.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <button onClick={handleGenerateFixtures} className="px-4 py-2 bg-brand-primary hover:bg-brand-secondary text-white rounded-md">Generate Fixtures</button>
+            <div className="p-4 border border-gray-700 rounded-md space-y-4 bg-gray-750">
+                 <div className="flex justify-between items-center">
+                    <h3 className="font-semibold">Generate Fixtures</h3>
+                 </div>
+                 <div className="grid md:grid-cols-12 gap-4 items-end">
+                    <div className="md:col-span-4">
+                        <label className="block text-xs text-gray-400 mb-1">Category</label>
+                        <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                            <option value="">-- Select --</option>
+                            {tournament.settings.categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div className="md:col-span-4">
+                         <label className="block text-xs text-gray-400 mb-1">Event Type</label>
+                         <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                            <option value="">-- Select --</option>
+                            {tournament.settings.types.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                    </div>
+                    <div className="md:col-span-4 flex gap-2">
+                         <button 
+                            onClick={handleGenerateFixtures} 
+                            disabled={!selectedCategory || !selectedType}
+                            className={`flex-1 px-4 py-2 rounded-md text-white font-medium transition-colors ${existingFixture ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-brand-primary hover:bg-brand-secondary'} disabled:bg-gray-600 disabled:cursor-not-allowed`}
+                         >
+                             {existingFixture ? 'Re-generate Fixtures' : 'Generate Fixtures'}
+                         </button>
+                         {existingFixture && (
+                            <button 
+                                onClick={handleDeleteFixtures}
+                                className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
+                                title="Delete these fixtures"
+                            >
+                                <DeleteIcon className="w-5 h-5"/>
+                            </button>
+                         )}
+                    </div>
                 </div>
-                 <div>
-                     <label htmlFor="json-upload" className="block text-sm font-medium text-gray-300 mb-2">Upload Custom Fixtures (JSON)</label>
+                
+                {selectedCategory && selectedType && (
+                    <div className="text-sm mt-2">
+                        Status: {existingFixture 
+                            ? <span className="text-green-400 font-medium flex items-center gap-1 inline-block"><CheckCircleIcon className="w-4 h-4 inline"/> Fixtures Generated ({existingFixture.groups.length} groups)</span> 
+                            : <span className="text-gray-400">Not generated yet</span>
+                        }
+                    </div>
+                )}
+
+                 <div className="pt-4 border-t border-gray-700 mt-4">
+                     <label htmlFor="json-upload" className="block text-sm font-medium text-gray-300 mb-2">Or Upload Custom Fixtures (JSON)</label>
                      <input id="json-upload" type="file" accept=".json" onChange={handleJsonUpload} className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-primary/20 file:text-brand-primary hover:file:bg-brand-primary/30"/>
                  </div>
             </div>
 
-            <div className="space-y-6">
-                {tournament.fixtures.map(fixture => (
-                    <div key={`${fixture.category}-${fixture.type}`}>
-                        <h3 className="text-xl font-semibold my-4">{fixture.category} - {fixture.type}</h3>
-                        {fixture.groups.map(group => (
-                            <div key={group.id} className="mb-6">
-                                <h4 className="text-lg font-bold p-2 bg-gray-700/50 rounded-t-md">{group.name}</h4>
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-700">
-                                        <thead className="bg-gray-700/50">
-                                            <tr>
-                                                <th className="px-2 py-2 text-left">Player 1</th>
-                                                <th className="px-2 py-2 text-left">Player 2</th>
-                                                <th className="px-2 py-2 text-center">Score</th>
-                                                <th className="px-2 py-2 text-center">Status</th>
-                                                <th className="px-2 py-2 text-center">History</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-700">
-                                            {group.matches.map(match => (
-                                                <tr key={match.id}>
-                                                    <td className="px-2 py-2">{playerMap.get(match.player1Id)?.name || 'N/A'}</td>
-                                                    <td className="px-2 py-2">{playerMap.get(match.player2Id)?.name || 'N/A'}</td>
-                                                    <td className="px-2 py-2">
-                                                        <div className="flex justify-center items-center gap-2">
-                                                            <input type="number" value={match.scoreP1 ?? ''} onChange={(e) => handleScoreChange(match.id, 'P1', e.target.value)} className="w-12 text-center bg-gray-700 border border-gray-600 rounded-md" />
-                                                            <span>-</span>
-                                                            <input type="number" value={match.scoreP2 ?? ''} onChange={(e) => handleScoreChange(match.id, 'P2', e.target.value)} className="w-12 text-center bg-gray-700 border border-gray-600 rounded-md" />
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-2 py-2 text-center">
-                                                        <select value={match.status} onChange={(e) => handleStatusChange(match, e.target.value as MatchStatus)} className="bg-gray-700 border border-gray-600 rounded-md p-1">
-                                                            {Object.values(MatchStatus).map(s => <option key={s} value={s}>{s}</option>)}
-                                                        </select>
-                                                    </td>
-                                                    <td className="px-2 py-2 text-center">
-                                                        <button onClick={() => setHistoryModalMatch(match)} className="p-1 text-gray-400 hover:text-white"><HistoryIcon /></button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+            <div className="space-y-8">
+                {tournament.fixtures.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">No fixtures available yet. Select a category above to generate them.</p>
+                ) : (
+                    tournament.fixtures.map(fixture => (
+                        <div key={`${fixture.category}-${fixture.type}`} className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+                            <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                                <h3 className="text-xl font-bold text-brand-primary">{fixture.category} - {fixture.type}</h3>
+                                <span className="text-xs bg-gray-700 px-2 py-1 rounded text-gray-300">{fixture.groups.length} Groups</span>
                             </div>
-                        ))}
-                    </div>
-                ))}
+                            
+                            <div className="grid gap-6 lg:grid-cols-2">
+                            {fixture.groups.map(group => (
+                                <div key={group.id} className="bg-gray-800 rounded-md overflow-hidden border border-gray-700">
+                                    <h4 className="text-sm font-bold p-2 bg-gray-700 text-white flex justify-between">
+                                        <span>{group.name}</span>
+                                        <span className="font-normal text-gray-400 text-xs">{group.matches.length} Matches</span>
+                                    </h4>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-700 text-sm">
+                                            <thead className="bg-gray-700/30">
+                                                <tr>
+                                                    <th className="px-2 py-2 text-left text-xs text-gray-400">Match</th>
+                                                    <th className="px-2 py-2 text-center text-xs text-gray-400">Score</th>
+                                                    <th className="px-2 py-2 text-center text-xs text-gray-400">Status</th>
+                                                    <th className="px-2 py-2 text-center text-xs text-gray-400">Log</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-700">
+                                                {group.matches.map(match => (
+                                                    <tr key={match.id} className={match.status === MatchStatus.Completed ? 'bg-green-900/10' : ''}>
+                                                        <td className="px-2 py-2">
+                                                            <div className="flex flex-col">
+                                                                <span className={match.scoreP1! > match.scoreP2! && match.status === MatchStatus.Completed ? 'font-bold text-green-400' : ''}>
+                                                                    {playerMap.get(match.player1Id)?.name || 'Unknown'}
+                                                                </span>
+                                                                <span className="text-xs text-gray-500">vs</span>
+                                                                <span className={match.scoreP2! > match.scoreP1! && match.status === MatchStatus.Completed ? 'font-bold text-green-400' : ''}>
+                                                                    {playerMap.get(match.player2Id)?.name || 'Unknown'}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-2 py-2 align-middle">
+                                                            <div className="flex flex-col gap-1 items-center">
+                                                                <input 
+                                                                    type="number" 
+                                                                    placeholder="0"
+                                                                    value={match.scoreP1 ?? ''} 
+                                                                    onChange={(e) => handleScoreChange(match.id, 'P1', e.target.value)} 
+                                                                    className="w-12 text-center bg-gray-700 border border-gray-600 rounded-sm text-sm p-0.5" 
+                                                                />
+                                                                <input 
+                                                                    type="number" 
+                                                                    placeholder="0"
+                                                                    value={match.scoreP2 ?? ''} 
+                                                                    onChange={(e) => handleScoreChange(match.id, 'P2', e.target.value)} 
+                                                                    className="w-12 text-center bg-gray-700 border border-gray-600 rounded-sm text-sm p-0.5" 
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-2 py-2 text-center align-middle">
+                                                            <select 
+                                                                value={match.status} 
+                                                                onChange={(e) => handleStatusChange(match, e.target.value as MatchStatus)} 
+                                                                className={`bg-gray-700 border-gray-600 rounded-sm text-xs p-1 max-w-[100px] ${match.status === MatchStatus.Completed ? 'text-green-400 border-green-900' : ''}`}
+                                                            >
+                                                                {Object.values(MatchStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                                                            </select>
+                                                        </td>
+                                                        <td className="px-2 py-2 text-center align-middle">
+                                                            <button onClick={() => setHistoryModalMatch(match)} className="text-gray-500 hover:text-brand-primary transition-colors">
+                                                                <HistoryIcon />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
 
             {historyModalMatch && <HistoryModal history={historyModalMatch.history} onClose={() => setHistoryModalMatch(null)} />}
