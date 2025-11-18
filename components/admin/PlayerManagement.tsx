@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
 import { Tournament, Player } from '../../types';
-import { EditIcon, DeleteIcon } from '../icons';
+import { EditIcon, DeleteIcon, CheckCircleIcon } from '../icons';
 
 interface PlayerManagementProps {
     tournament: Tournament;
@@ -15,6 +16,11 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
         categories: [] as string[],
         feePaid: false,
     });
+
+    // Category Management State
+    const [isCategoryMgrOpen, setCategoryMgrOpen] = useState(false);
+    const [editingCategory, setEditingCategory] = useState<string | null>(null);
+    const [newCategoryName, setNewCategoryName] = useState('');
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
@@ -112,7 +118,8 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
                 
                 const categories = row.Categories.split('|').map(c => {
                     const cat = c.trim().replace(/\+?$/, '+');
-                    return tournament.settings.categories.find(tc => tc.startsWith(cat.slice(0, -1))) || cat;
+                    // Try to find exact or partial match in current tournament categories
+                    return tournament.settings.categories.find(tc => tc === cat || tc.startsWith(cat.slice(0, -1))) || cat;
                 }).filter(Boolean);
 
                 const mobile = row.MobileNumber;
@@ -153,6 +160,64 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
         reader.readAsText(file);
     };
 
+    // Category Editing Logic
+    const startEditCategory = (cat: string) => {
+        setEditingCategory(cat);
+        setNewCategoryName(cat);
+    };
+
+    const cancelEditCategory = () => {
+        setEditingCategory(null);
+        setNewCategoryName('');
+    };
+
+    const saveCategory = () => {
+        if (!editingCategory || !newCategoryName.trim()) return;
+        
+        const oldName = editingCategory;
+        const newName = newCategoryName.trim();
+
+        if (oldName === newName) {
+            cancelEditCategory();
+            return;
+        }
+
+        if (tournament.settings.categories.includes(newName)) {
+            alert('Category name already exists!');
+            return;
+        }
+
+        const playerCount = tournament.players.filter(p => p.categories.includes(oldName)).length;
+        const fixtureCount = tournament.fixtures.filter(f => f.category === oldName).length;
+
+        if (window.confirm(`Are you sure you want to rename '${oldName}' to '${newName}'?\n\nThis will update:\n- ${playerCount} Players\n- ${fixtureCount} Fixture Sets`)) {
+            setTournament(prev => {
+                // 1. Update Settings
+                const updatedCategories = prev.settings.categories.map(c => c === oldName ? newName : c);
+
+                // 2. Update Players
+                const updatedPlayers = prev.players.map(p => ({
+                    ...p,
+                    categories: p.categories.map(c => c === oldName ? newName : c)
+                }));
+
+                // 3. Update Fixtures
+                const updatedFixtures = prev.fixtures.map(f => ({
+                    ...f,
+                    category: f.category === oldName ? newName : f.category
+                }));
+
+                return {
+                    ...prev,
+                    settings: { ...prev.settings, categories: updatedCategories },
+                    players: updatedPlayers,
+                    fixtures: updatedFixtures
+                };
+            });
+            cancelEditCategory();
+        }
+    };
+
     const sortedPlayers = useMemo(() => {
         return [...tournament.players].sort((a, b) => {
             if (a.mobileNumber < b.mobileNumber) return -1;
@@ -164,7 +229,15 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
 
     return (
         <div className="bg-gray-800 p-6 rounded-lg shadow-lg space-y-6">
-            <h2 className="text-xl font-bold">2. Player Management</h2>
+            <div className="flex justify-between items-center">
+                 <h2 className="text-xl font-bold">2. Player Management</h2>
+                 <button 
+                    onClick={() => setCategoryMgrOpen(true)} 
+                    className="text-sm text-brand-primary hover:text-brand-secondary underline font-medium flex items-center gap-1"
+                 >
+                    <EditIcon className="w-4 h-4"/> Manage Categories
+                 </button>
+            </div>
 
             {/* Add/Edit Form */}
             <form onSubmit={handleSubmit} className="p-4 border border-gray-700 rounded-md space-y-4">
@@ -235,6 +308,53 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
                     </tbody>
                  </table>
             </div>
+
+            {/* Category Management Modal */}
+            {isCategoryMgrOpen && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                    <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700 animate-fade-in">
+                        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-white">Manage Categories</h3>
+                            <button onClick={() => setCategoryMgrOpen(false)} className="text-gray-400 hover:text-white text-xl">&times;</button>
+                        </div>
+                        <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                            <p className="text-sm text-gray-400 mb-2">Rename categories here. Changes will automatically update all associated players and fixtures.</p>
+                            {tournament.settings.categories.length === 0 ? (
+                                <p className="text-gray-500 italic">No categories selected yet.</p>
+                            ) : (
+                                tournament.settings.categories.map(cat => (
+                                    <div key={cat} className="flex items-center justify-between bg-gray-700/50 p-3 rounded-md border border-gray-700">
+                                        {editingCategory === cat ? (
+                                            <div className="flex items-center gap-2 w-full">
+                                                <input 
+                                                    type="text" 
+                                                    value={newCategoryName}
+                                                    onChange={(e) => setNewCategoryName(e.target.value)}
+                                                    className="flex-1 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-sm focus:outline-none focus:border-brand-primary text-white"
+                                                    autoFocus
+                                                    placeholder="New name"
+                                                />
+                                                <button onClick={saveCategory} className="text-green-400 hover:text-green-300 p-1" title="Save"><CheckCircleIcon className="w-5 h-5"/></button>
+                                                <button onClick={cancelEditCategory} className="text-red-400 hover:text-red-300 text-sm px-2" title="Cancel">Cancel</button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className="text-gray-200">{cat}</span>
+                                                <button onClick={() => startEditCategory(cat)} className="text-gray-400 hover:text-brand-primary p-1" title="Edit Name">
+                                                    <EditIcon className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-gray-700 text-right bg-gray-800/50 rounded-b-lg">
+                            <button onClick={() => setCategoryMgrOpen(false)} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-md text-sm font-medium transition-colors">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
