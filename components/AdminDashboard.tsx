@@ -161,7 +161,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
             </div>
 
             <div>
-                {activeTab === 'setup' && <TournamentSetup settings={tournament.settings} setTournament={setTournament} />}
+                {activeTab === 'setup' && <TournamentSetup settings={tournament.settings} tournamentId={tournament.id} setTournament={setTournament} />}
                 {activeTab === 'players' && <PlayerManagement tournament={tournament} setTournament={setTournament} />}
                 {activeTab === 'fixtures' && <FixtureManagement tournament={tournament} setTournament={setTournament} />}
             </div>

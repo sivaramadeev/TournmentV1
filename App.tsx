@@ -113,9 +113,23 @@ const App: React.FC = () => {
         }
     };
     
-    const handleImportTournaments = (importedData: Tournament[]) => {
-        setTournaments(importedData);
-        alert('Data restored successfully!');
+    const handleImportTournaments = (importedData: Tournament[], mode: 'merge' | 'replace') => {
+        if (mode === 'replace') {
+            setTournaments(importedData);
+            alert(`Successfully replaced database with ${importedData.length} tournaments.`);
+        } else {
+            setTournaments(prev => {
+                // Create a map of incoming tournaments by ID for easy lookup
+                const incomingMap = new Map(importedData.map(t => [t.id, t]));
+                
+                // Filter existing tournaments: Keep only those NOT in the incoming data (to allow overwrite)
+                // OR strictly append? Usually "Merge" implies overwriting updates for same ID.
+                const existingFiltered = prev.filter(t => !incomingMap.has(t.id));
+                
+                return [...existingFiltered, ...importedData];
+            });
+            alert(`Successfully merged. Total tournaments: ${tournaments.length + importedData.length} (roughly)`);
+        }
     };
 
     const handleUpdateActiveTournament = (

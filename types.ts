@@ -30,15 +30,16 @@ export interface MatchHistoryEntry {
 
 export interface Match {
   id: string;
-  player1Id: string;
-  player2Id: string;
+  player1Id: string | null; // Null if waiting for winner or BYE
+  player2Id: string | null;
   scoreP1: number | null;
   scoreP2: number | null;
   status: MatchStatus;
   history: MatchHistoryEntry[];
-  // Future proofing for knockouts
+  // Knockout specific
   roundName?: string; 
   nextMatchId?: string;
+  nextMatchPlayerIndex?: 0 | 1; // 0 for P1, 1 for P2 in the next match
 }
 
 export interface Group {
@@ -51,8 +52,9 @@ export interface Group {
 export interface CategoryFixture {
   category: string;
   type: string;
-  groups: Group[];
-  knockoutMatches?: Match[];
+  format: 'RoundRobin' | 'Knockout'; // Added to distinguish formats
+  groups: Group[]; // Used for Round Robin
+  knockoutMatches?: Match[]; // Used for Knockout
 }
 
 export interface TournamentSettings {
@@ -69,5 +71,5 @@ export interface Tournament {
   fixtures: CategoryFixture[];
   isPublished: boolean;
   status: TournamentStatus;
-  gistId?: string; // Tracks the GitHub Gist ID for cloud syncing
+  gistId?: string; 
 }

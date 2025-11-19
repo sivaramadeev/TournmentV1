@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Tournament } from '../types';
 import { DeleteIcon, EditIcon, CheckCircleIcon } from './icons';
 
@@ -8,12 +8,18 @@ interface AdminTournamentListProps {
     onCreate: (name: string) => void;
     onSelect: (id: string) => void;
     onDelete: (id: string) => void;
-    onImport: (data: Tournament[]) => void;
+    onImport: (data: Tournament[], mode: 'merge' | 'replace') => void;
 }
 
 const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, onCreate, onSelect, onDelete, onImport }) => {
     const [isCreating, setIsCreating] = useState(false);
     const [newTournamentName, setNewTournamentName] = useState('');
+
+    // Import Modal State
+    const [isImportModalOpen, setImportModalOpen] = useState(false);
+    const [importLogs, setImportLogs] = useState<string[]>([]);
+    const [pendingData, setPendingData] = useState<Tournament[] | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleCreateSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -36,33 +42,66 @@ const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, 
         document.body.removeChild(link);
     };
 
-    const handleImportClick = () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.onchange = (e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    const json = JSON.parse(event.target?.result as string);
-                    if (Array.isArray(json)) {
-                        if (window.confirm(`This will overwrite all current data with ${json.length} tournaments from the backup. Are you sure?`)) {
-                            onImport(json);
-                        }
-                    } else {
-                        alert('Invalid backup file format.');
-                    }
-                } catch (err) {
-                    alert('Failed to parse JSON file.');
-                    console.error(err);
+    const addLog = (msg: string) => setImportLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+
+    const processImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setImportLogs([]);
+        setPendingData(null);
+        addLog(`Reading file: ${file.name} (${(file.size / 1024).toFixed(2)} KB)...`);
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                addLog('File read successful. Parsing JSON...');
+                const rawData = event.target?.result as string;
+                const json = JSON.parse(rawData);
+
+                if (!Array.isArray(json)) {
+                    addLog('Error: Root element is not an array.');
+                    alert('Invalid file format. Expected a JSON array of tournaments.');
+                    return;
                 }
-            };
-            reader.readAsText(file);
+
+                addLog(`JSON Parsed. Found ${json.length} items. Validating structure...`);
+                
+                // Basic validation
+                const validTournaments = json.filter((t: any) => {
+                    return t && typeof t === 'object' && t.id && t.settings && Array.isArray(t.players);
+                });
+
+                if (validTournaments.length === 0) {
+                    addLog('Error: No valid tournament data found in file.');
+                    return;
+                }
+
+                if (validTournaments.length < json.length) {
+                    addLog(`Warning: Skipped ${json.length - validTournaments.length} invalid items.`);
+                }
+
+                addLog(`Validation Complete. ${validTournaments.length} valid tournaments ready to restore.`);
+                setPendingData(validTournaments as Tournament[]);
+
+            } catch (err) {
+                addLog(`Error: Failed to parse JSON. ${(err as Error).message}`);
+                console.error(err);
+            }
         };
-        input.click();
+        reader.onerror = () => {
+            addLog('Error: Failed to read file.');
+        };
+        reader.readAsText(file);
+    };
+
+    const confirmImport = (mode: 'merge' | 'replace') => {
+        if (pendingData) {
+            onImport(pendingData, mode);
+            setImportModalOpen(false);
+            setPendingData(null);
+            setImportLogs([]);
+        }
     };
 
     return (
@@ -78,7 +117,7 @@ const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, 
                         ⬇ Backup Data
                     </button>
                     <button
-                        onClick={handleImportClick}
+                        onClick={() => setImportModalOpen(true)}
                         className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-md font-medium transition-colors text-sm border border-gray-600"
                         title="Restore data from a backup file"
                     >
@@ -102,7 +141,7 @@ const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, 
                             value={newTournamentName}
                             onChange={(e) => setNewTournamentName(e.target.value)}
                             placeholder="Enter Tournament Name (e.g. Winter Cup 2024)"
-                            className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-brand-primary focus:border-brand-primary"
+                            className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-brand-primary focus:border-brand-primary text-white"
                             autoFocus
                         />
                         <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md">Create & Setup</button>
@@ -157,6 +196,66 @@ const AdminTournamentList: React.FC<AdminTournamentListProps> = ({ tournaments, 
                     ))
                 )}
             </div>
+
+            {/* Restore Data Modal */}
+            {isImportModalOpen && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg border border-gray-700 flex flex-col max-h-[90vh]">
+                        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-white">Restore Data</h3>
+                            <button onClick={() => setImportModalOpen(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                            {!pendingData ? (
+                                <div className="space-y-4">
+                                    <div className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center bg-gray-700/30">
+                                        <p className="text-gray-300 mb-2">Select a JSON backup file to restore</p>
+                                        <input 
+                                            type="file" 
+                                            accept=".json" 
+                                            ref={fileInputRef}
+                                            onChange={processImportFile}
+                                            className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-primary file:text-white hover:file:bg-brand-secondary cursor-pointer"
+                                        />
+                                    </div>
+                                    {importLogs.length > 0 && (
+                                        <div className="bg-black/50 p-3 rounded text-xs font-mono text-green-400 h-32 overflow-y-auto">
+                                            {importLogs.map((log, i) => <div key={i}>{log}</div>)}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                     <div className="bg-black/50 p-3 rounded text-xs font-mono text-green-400 h-32 overflow-y-auto">
+                                        {importLogs.map((log, i) => <div key={i}>{log}</div>)}
+                                    </div>
+                                    <div className="bg-brand-primary/20 border border-brand-primary p-4 rounded-md">
+                                        <p className="text-white font-medium">Ready to restore {pendingData.length} tournaments.</p>
+                                        <p className="text-sm text-gray-300 mt-1">Choose how you want to proceed:</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <button 
+                                            onClick={() => confirmImport('merge')}
+                                            className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors text-sm"
+                                        >
+                                            Merge with Existing
+                                            <span className="block text-xs font-normal opacity-75 mt-1">Keep current & add missing</span>
+                                        </button>
+                                        <button 
+                                            onClick={() => confirmImport('replace')}
+                                            className="px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors text-sm"
+                                        >
+                                            Replace All
+                                            <span className="block text-xs font-normal opacity-75 mt-1">Delete current & use backup</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

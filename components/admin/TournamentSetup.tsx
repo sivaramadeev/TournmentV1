@@ -1,18 +1,54 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tournament, TournamentSettings } from '../../types';
 import { TOURNAMENT_TYPES, PLAYER_CATEGORIES } from '../../constants';
 
 interface TournamentSetupProps {
     settings: TournamentSettings;
+    tournamentId: string;
     setTournament: React.Dispatch<React.SetStateAction<Tournament>>;
 }
 
-const TournamentSetup: React.FC<TournamentSetupProps> = ({ settings, setTournament }) => {
+const TournamentSetup: React.FC<TournamentSetupProps> = ({ settings, tournamentId, setTournament }) => {
     const [localSettings, setLocalSettings] = useState<TournamentSettings>(settings);
+    const [autoSaveStatus, setAutoSaveStatus] = useState<string>('');
 
+    // 1. Load draft from localStorage on mount
     useEffect(() => {
-        setLocalSettings(settings);
-    }, [settings]);
+        const draftKey = `autosave_setup_${tournamentId}`;
+        const draftData = localStorage.getItem(draftKey);
+        
+        if (draftData) {
+            try {
+                const parsedDraft = JSON.parse(draftData);
+                // Only apply draft if it's different from current props
+                if (JSON.stringify(parsedDraft) !== JSON.stringify(settings)) {
+                    setLocalSettings(parsedDraft);
+                    setAutoSaveStatus('Restored unsaved draft');
+                }
+            } catch (e) {
+                console.error("Failed to parse auto-save draft", e);
+            }
+        } else {
+            setLocalSettings(settings);
+        }
+    }, [tournamentId, settings]);
+
+    // 2. Auto-save to localStorage on change
+    useEffect(() => {
+        const draftKey = `autosave_setup_${tournamentId}`;
+        const timer = setTimeout(() => {
+            if (JSON.stringify(localSettings) !== JSON.stringify(settings)) {
+                localStorage.setItem(draftKey, JSON.stringify(localSettings));
+                setAutoSaveStatus('Draft auto-saved');
+                
+                // Clear status after 2 seconds
+                setTimeout(() => setAutoSaveStatus(''), 2000);
+            }
+        }, 1000); // Debounce for 1 second
+
+        return () => clearTimeout(timer);
+    }, [localSettings, tournamentId, settings]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setLocalSettings({ ...localSettings, name: e.target.value });
@@ -28,12 +64,22 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ settings, setTourname
 
     const handleSave = () => {
         setTournament(prev => ({ ...prev, settings: localSettings }));
+        
+        // Clear draft after successful save
+        localStorage.removeItem(`autosave_setup_${tournamentId}`);
+        setAutoSaveStatus('');
+        
         alert('Tournament settings saved!');
     };
 
     return (
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg space-y-6">
-            <h2 className="text-xl font-bold">1. Tournament Setup</h2>
+        <div className="bg-gray-800 p-6 rounded-lg shadow-lg space-y-6 relative">
+            <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold">1. Tournament Setup</h2>
+                {autoSaveStatus && (
+                    <span className="text-xs text-gray-400 italic animate-pulse">{autoSaveStatus}</span>
+                )}
+            </div>
             <div>
                 <label htmlFor="tournamentName" className="block text-sm font-medium text-gray-300">Tournament Name</label>
                 <input

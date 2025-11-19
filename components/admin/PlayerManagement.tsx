@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Tournament, Player } from '../../types';
 import { EditIcon, DeleteIcon, CheckCircleIcon } from '../icons';
 
@@ -16,11 +16,45 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
         categories: [] as string[],
         feePaid: false,
     });
+    const [autoSaveStatus, setAutoSaveStatus] = useState('');
 
     // Category Management State
     const [isCategoryMgrOpen, setCategoryMgrOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<string | null>(null);
     const [newCategoryName, setNewCategoryName] = useState('');
+
+    // 1. Load draft
+    useEffect(() => {
+        if (editPlayerId) return; // Don't load draft if explicitly editing an existing player
+
+        const draftKey = `autosave_player_form_${tournament.id}`;
+        const draft = localStorage.getItem(draftKey);
+        if (draft) {
+            try {
+                const parsed = JSON.parse(draft);
+                // Simple check to see if draft has content
+                if (parsed.name || parsed.mobileNumber || parsed.categories.length > 0) {
+                    setPlayerForm(parsed);
+                    setAutoSaveStatus('Restored draft');
+                    setTimeout(() => setAutoSaveStatus(''), 2000);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    }, [tournament.id, editPlayerId]);
+
+    // 2. Auto-save
+    useEffect(() => {
+        if (editPlayerId) return; // Don't auto-save edit state to the general draft
+
+        const draftKey = `autosave_player_form_${tournament.id}`;
+        const timer = setTimeout(() => {
+            localStorage.setItem(draftKey, JSON.stringify(playerForm));
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [playerForm, tournament.id, editPlayerId]);
+
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
@@ -48,6 +82,8 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
     const resetForm = () => {
         setEditPlayerId(null);
         setPlayerForm({ name: '', mobileNumber: '', categories: [], feePaid: false });
+        // Clear draft
+        localStorage.removeItem(`autosave_player_form_${tournament.id}`);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -231,12 +267,15 @@ const PlayerManagement: React.FC<PlayerManagementProps> = ({ tournament, setTour
         <div className="bg-gray-800 p-6 rounded-lg shadow-lg space-y-6">
             <div className="flex justify-between items-center">
                  <h2 className="text-xl font-bold">2. Player Management</h2>
-                 <button 
-                    onClick={() => setCategoryMgrOpen(true)} 
-                    className="text-sm text-brand-primary hover:text-brand-secondary underline font-medium flex items-center gap-1"
-                 >
-                    <EditIcon className="w-4 h-4"/> Manage Categories
-                 </button>
+                 <div className="flex items-center gap-4">
+                    {autoSaveStatus && <span className="text-xs text-green-400 animate-pulse">{autoSaveStatus}</span>}
+                    <button 
+                        onClick={() => setCategoryMgrOpen(true)} 
+                        className="text-sm text-brand-primary hover:text-brand-secondary underline font-medium flex items-center gap-1"
+                    >
+                        <EditIcon className="w-4 h-4"/> Manage Categories
+                    </button>
+                 </div>
             </div>
 
             {/* Add/Edit Form */}
