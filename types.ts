@@ -1,11 +1,15 @@
 
+export type TournamentStatus = 'Draft' | 'Publishing' | 'Published';
+
+export type View = 'login' | 'admin' | 'player';
+
 export enum MatchStatus {
   Scheduled = 'Scheduled',
   InProgress = 'In-Progress',
   Completed = 'Completed',
   WalkoverP1 = 'Walkover P1',
   WalkoverP2 = 'Walkover P2',
-  Disqualified = 'Disqualified',
+  Disqualified = 'Disqualified'
 }
 
 export interface Player {
@@ -32,6 +36,9 @@ export interface Match {
   scoreP2: number | null;
   status: MatchStatus;
   history: MatchHistoryEntry[];
+  // Future proofing for knockouts
+  roundName?: string; 
+  nextMatchId?: string;
 }
 
 export interface Group {
@@ -45,6 +52,7 @@ export interface CategoryFixture {
   category: string;
   type: string;
   groups: Group[];
+  knockoutMatches?: Match[];
 }
 
 export interface TournamentSettings {
@@ -52,8 +60,6 @@ export interface TournamentSettings {
   types: string[];
   categories: string[];
 }
-
-export type TournamentStatus = 'Draft' | 'Publishing' | 'Published';
 
 export interface Tournament {
   id: string;
@@ -63,4 +69,5 @@ export interface Tournament {
   fixtures: CategoryFixture[];
   isPublished: boolean;
   status: TournamentStatus;
+  gistId?: string; // Tracks the GitHub Gist ID for cloud syncing
 }

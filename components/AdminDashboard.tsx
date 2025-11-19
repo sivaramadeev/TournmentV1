@@ -4,6 +4,7 @@ import { Tournament } from '../types';
 import TournamentSetup from './admin/TournamentSetup';
 import PlayerManagement from './admin/PlayerManagement';
 import FixtureManagement from './admin/FixtureManagement';
+import ShareModal from './ShareModal';
 
 interface AdminDashboardProps {
     tournament: Tournament;
@@ -13,6 +14,7 @@ interface AdminDashboardProps {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTournament, onBack }) => {
     const [activeTab, setActiveTab] = useState('setup');
+    const [showShareModal, setShowShareModal] = useState(false);
 
     const handlePublish = () => {
         if (publishDisabledReason) {
@@ -102,6 +104,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
         exportToCsv(data, 'match_results.csv');
     };
 
+    const handleSyncComplete = (gistId: string) => {
+        setTournament(prev => ({ ...prev, gistId }));
+    };
 
     const publishDisabledReason = (() => {
         if (!tournament.settings.name) return "Tournament name is not set.";
@@ -118,9 +123,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
                 <button onClick={onBack} className="text-sm text-gray-400 hover:text-white flex items-center gap-1">
                     &larr; Back to Tournament List
                 </button>
-                <h2 className="text-xl font-bold text-white hidden md:block">
-                    {tournament.settings.name || 'New Tournament'}
-                </h2>
+                <div className="flex items-center gap-4">
+                    <h2 className="text-xl font-bold text-white hidden md:block">
+                        {tournament.settings.name || 'New Tournament'}
+                    </h2>
+                    <button 
+                        onClick={() => setShowShareModal(true)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-md transition-colors border border-indigo-500"
+                    >
+                        ☁ Cloud Sync
+                    </button>
+                </div>
             </div>
 
             <div className="bg-gray-800 p-4 rounded-lg shadow-lg flex flex-col md:flex-row justify-between items-center gap-4">
@@ -161,6 +174,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
                      <button onClick={exportMatchResultsData} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-medium">Export Match Results (CSV)</button>
                 </div>
             </div>
+            
+            {showShareModal && (
+                <ShareModal 
+                    tournament={tournament} 
+                    onClose={() => setShowShareModal(false)} 
+                    onSyncComplete={handleSyncComplete}
+                />
+            )}
         </div>
     );
 };

@@ -9,8 +9,8 @@ import PlayerView from './components/PlayerView';
 import Header from './components/Header';
 import AdminTournamentList from './components/AdminTournamentList';
 import PublicTournamentList from './components/PublicTournamentList';
-
-export type View = 'player' | 'admin' | 'login';
+import { gistService } from './services/gistService';
+import { View } from './types';
 
 const App: React.FC = () => {
     // Store array of tournaments in local storage
@@ -19,30 +19,68 @@ const App: React.FC = () => {
     const [isAdminLoggedIn, setIsAdminLoggedIn] = useLocalStorage<boolean>('isAdminLoggedIn', false);
     const [currentView, setCurrentView] = useState<View>('player');
     
-    // FIX: Persist the active tournament ID so refresh doesn't kick user back to list
+    // Persist the active tournament ID so refresh doesn't kick user back to list
     const [activeTournamentId, setActiveTournamentId] = useLocalStorage<string | null>('activeTournamentId', null);
     
     const [loading, setLoading] = useState(true);
 
+    // Check for cloud data in URL on mount
     useEffect(() => {
+        const loadCloudData = async () => {
+            const params = new URLSearchParams(window.location.search);
+            const gistId = params.get('data');
+            
+            if (gistId) {
+                try {
+                    setLoading(true);
+                    // Check if we already have this tournament loaded
+                    const existing = tournaments.find(t => t.gistId === gistId);
+                    if (existing) {
+                        setActiveTournamentId(existing.id);
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Load from GitHub
+                    const cloudTournament = await gistService.loadFromGist(gistId);
+                    
+                    // Save to local storage so it's available next time
+                    setTournaments(prev => {
+                        // Remove potential duplicates by ID
+                        const filtered = prev.filter(t => t.id !== cloudTournament.id);
+                        return [...filtered, cloudTournament];
+                    });
+                    
+                    setActiveTournamentId(cloudTournament.id);
+                } catch (error) {
+                    console.error('Failed to load from cloud:', error);
+                    alert('Failed to load tournament from link. Please check the URL.');
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                setLoading(false);
+            }
+        };
+
         // Ensure tournaments is always an array (recovers from potential corrupted storage)
         if (!Array.isArray(tournaments)) {
             setTournaments([]);
         }
         
+        loadCloudData();
+
         if (isAdminLoggedIn) {
             setCurrentView('admin');
         } else {
             setCurrentView('player');
         }
-        setLoading(false);
-    }, [isAdminLoggedIn, tournaments, setTournaments]);
+    }, [isAdminLoggedIn, setTournaments, setActiveTournamentId]); // Removed tournaments dependency to avoid loops
 
     const handleLogin = useCallback((user: string, pass: string): boolean => {
         if (user === ADMIN_USERNAME && pass === ADMIN_PASSWORD) {
             setIsAdminLoggedIn(true);
             setCurrentView('admin');
-            // Don't reset activeTournamentId here, so if they logged in previously and refreshed, they stay put.
             return true;
         }
         return false;
@@ -100,7 +138,7 @@ const App: React.FC = () => {
 
     const renderContent = () => {
         if (loading) {
-            return <div className="text-center p-10">Loading Application...</div>;
+            return <div className="flex h-screen items-center justify-center text-xl text-brand-primary animate-pulse">Loading Application Data...</div>;
         }
 
         const activeTournament = Array.isArray(tournaments) ? tournaments.find(t => t.id === activeTournamentId) : null;

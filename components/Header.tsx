@@ -1,6 +1,6 @@
+
 import React from 'react';
-import { View } from '../App';
-import { TournamentStatus } from '../types';
+import { View, TournamentStatus } from '../types';
 import { EyeIcon, AdminIcon } from './icons';
 
 interface HeaderProps {
