@@ -88,8 +88,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
         tournament.fixtures.forEach(f => {
             f.groups.forEach(g => {
                 g.matches.forEach(m => {
-                    const p1Name = m.player1Id ? playerMap.get(m.player1Id) : null;
-                    const p2Name = m.player2Id ? playerMap.get(m.player2Id) : null;
+                    const p1Id = m.player1Id;
+                    const p2Id = m.player2Id;
+                    const p1Name = p1Id ? playerMap.get(p1Id) : null;
+                    const p2Name = p2Id ? playerMap.get(p2Id) : null;
 
                     data.push({
                         Category: f.category,

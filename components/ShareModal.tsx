@@ -43,10 +43,11 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
             const gistId = await gistService.saveToGist(token, tournament, tournament.gistId);
             onSyncComplete(gistId);
             
-            // Generate the link based on current location
-            // Use window.location.origin and pathname to strip existing params
-            const baseUrl = window.location.origin + window.location.pathname;
-            setGeneratedLink(`${baseUrl}?data=${gistId}`);
+            // Generate the link based on current location using URL API for robustness
+            const url = new URL(window.location.href);
+            url.search = `?data=${gistId}`;
+            url.hash = ''; // Ensure hash doesn't interfere
+            setGeneratedLink(url.toString());
         } catch (err: any) {
             setError(err.message || 'An error occurred while syncing.');
         } finally {
