@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tournament } from '../types';
 import { gistService } from '../services/gistService';
 
@@ -14,6 +14,15 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [generatedLink, setGeneratedLink] = useState('');
+    const [saveToken, setSaveToken] = useState(true);
+
+    // Load token from local storage on mount
+    useEffect(() => {
+        const savedToken = localStorage.getItem('github_gist_token');
+        if (savedToken) {
+            setToken(savedToken);
+        }
+    }, []);
 
     const handleSync = async () => {
         if (!token) {
@@ -23,6 +32,12 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
         
         setLoading(true);
         setError('');
+
+        if (saveToken) {
+            localStorage.setItem('github_gist_token', token);
+        } else {
+            localStorage.removeItem('github_gist_token');
+        }
 
         try {
             const gistId = await gistService.saveToGist(token, tournament, tournament.gistId);
@@ -45,7 +60,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+            <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700 animate-fade-in">
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <h3 className="text-xl font-bold text-white">Sync to Cloud (GitHub)</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
@@ -59,7 +74,17 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
                                 This will save the data to a public Gist on your GitHub account.
                             </p>
                             <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1">GitHub Token (Fine-grained or Classic with 'gist' scope)</label>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs font-medium text-gray-400">GitHub Token</label>
+                                    <a 
+                                        href="https://github.com/settings/tokens/new?scopes=gist&description=Tournament+Manager+Sync" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-brand-primary hover:text-brand-secondary underline"
+                                    >
+                                        Get Token (Select 'gist')
+                                    </a>
+                                </div>
                                 <input 
                                     type="password" 
                                     value={token}
@@ -68,13 +93,33 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
                                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-brand-primary focus:border-brand-primary"
                                 />
                             </div>
-                            {error && <p className="text-red-400 text-sm">{error}</p>}
+                            <div className="flex items-center">
+                                <input 
+                                    type="checkbox" 
+                                    id="saveToken" 
+                                    checked={saveToken} 
+                                    onChange={(e) => setSaveToken(e.target.checked)}
+                                    className="h-4 w-4 text-brand-primary bg-gray-700 border-gray-600 rounded focus:ring-brand-primary"
+                                />
+                                <label htmlFor="saveToken" className="ml-2 text-sm text-gray-400">Remember my token for future syncs</label>
+                            </div>
+
+                            {error && <p className="text-red-400 text-sm bg-red-900/20 p-2 rounded border border-red-800">{error}</p>}
+                            
                             <button 
                                 onClick={handleSync} 
                                 disabled={loading}
-                                className="w-full py-2 px-4 bg-brand-primary hover:bg-brand-secondary text-white rounded-md font-medium transition-colors disabled:opacity-50"
+                                className="w-full py-2 px-4 bg-brand-primary hover:bg-brand-secondary text-white rounded-md font-medium transition-colors disabled:opacity-50 flex justify-center"
                             >
-                                {loading ? 'Syncing...' : 'Sync & Generate Link'}
+                                {loading ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Syncing...
+                                    </span>
+                                ) : 'Sync & Generate Link'}
                             </button>
                         </>
                     ) : (
@@ -95,10 +140,17 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
                                     </button>
                                 </div>
                             </div>
-                            <p className="text-xs text-gray-500">
-                                Send this link to players. They can view the tournament without logging in. 
-                                Future updates require you to click "Sync" again using your token.
-                            </p>
+                            <div className="text-xs text-gray-500 space-y-1">
+                                <p>1. Send this link to players to view matches on mobile.</p>
+                                <p>2. Players can refresh their page to see live updates.</p>
+                                <p>3. <strong>Important:</strong> To update scores, come back here and click "Sync" again.</p>
+                            </div>
+                            <button 
+                                onClick={() => { setGeneratedLink(''); }}
+                                className="w-full mt-2 py-2 text-sm text-gray-400 hover:text-white"
+                            >
+                                Sync Again
+                            </button>
                         </div>
                     )}
                 </div>

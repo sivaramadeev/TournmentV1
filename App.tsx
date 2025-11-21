@@ -33,20 +33,12 @@ const App: React.FC = () => {
             if (gistId) {
                 try {
                     setLoading(true);
-                    // Check if we already have this tournament loaded
-                    const existing = tournaments.find(t => t.gistId === gistId);
-                    if (existing) {
-                        setActiveTournamentId(existing.id);
-                        setLoading(false);
-                        return;
-                    }
-
-                    // Load from GitHub
+                    // Always fetch from cloud to ensure we have the latest data (Live Scoring)
                     const cloudTournament = await gistService.loadFromGist(gistId);
                     
-                    // Save to local storage so it's available next time
+                    // Update local storage with the fresh cloud data
                     setTournaments(prev => {
-                        // Remove potential duplicates by ID
+                        // Remove potential duplicates by ID to ensure we replace the old version
                         const filtered = prev.filter(t => t.id !== cloudTournament.id);
                         return [...filtered, cloudTournament];
                     });
@@ -54,7 +46,24 @@ const App: React.FC = () => {
                     setActiveTournamentId(cloudTournament.id);
                 } catch (error) {
                     console.error('Failed to load from cloud:', error);
-                    alert('Failed to load tournament from link. Please check the URL.');
+                    
+                    // Fallback: If cloud fails, check if we have a local copy
+                    // We need to access the current tournaments state here. 
+                    // Since we can't easily access the up-to-date state inside this effect without dependencies,
+                    // we rely on the fact that useLocalStorage initializes synchronously.
+                    const storedData = window.localStorage.getItem('tournamentServiceData');
+                    if (storedData) {
+                        const parsed: Tournament[] = JSON.parse(storedData);
+                        const existing = parsed.find(t => t.gistId === gistId);
+                        if (existing) {
+                            setActiveTournamentId(existing.id);
+                            alert('Network error: Could not sync latest data. Showing cached version.');
+                        } else {
+                             alert('Failed to load tournament from link. Please check your connection.');
+                        }
+                    } else {
+                        alert('Failed to load tournament from link. Please check the URL.');
+                    }
                 } finally {
                     setLoading(false);
                 }
@@ -75,7 +84,8 @@ const App: React.FC = () => {
         } else {
             setCurrentView('player');
         }
-    }, [isAdminLoggedIn, setTournaments, setActiveTournamentId]); // Removed tournaments dependency to avoid loops
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Run once on mount
 
     const handleLogin = useCallback((user: string, pass: string): boolean => {
         if (user === ADMIN_USERNAME && pass === ADMIN_PASSWORD) {
@@ -119,13 +129,8 @@ const App: React.FC = () => {
             alert(`Successfully replaced database with ${importedData.length} tournaments.`);
         } else {
             setTournaments(prev => {
-                // Create a map of incoming tournaments by ID for easy lookup
                 const incomingMap = new Map(importedData.map(t => [t.id, t]));
-                
-                // Filter existing tournaments: Keep only those NOT in the incoming data (to allow overwrite)
-                // OR strictly append? Usually "Merge" implies overwriting updates for same ID.
                 const existingFiltered = prev.filter(t => !incomingMap.has(t.id));
-                
                 return [...existingFiltered, ...importedData];
             });
             alert(`Successfully merged. Total tournaments: ${tournaments.length + importedData.length} (roughly)`);
