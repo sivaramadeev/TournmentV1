@@ -208,8 +208,8 @@ const PlayerView: React.FC<PlayerViewProps> = ({ tournament, onBack }) => {
                                                 <tbody className="bg-gray-800 divide-y divide-gray-700">
                                                     {group.matches.map(match => {
                                                         const styles = getStatusStyles(match.status);
-                                                        const player1 = playerMap.get(match.player1Id);
-                                                        const player2 = playerMap.get(match.player2Id);
+                                                        const player1 = match.player1Id ? playerMap.get(match.player1Id) : undefined;
+                                                        const player2 = match.player2Id ? playerMap.get(match.player2Id) : undefined;
                                                         
                                                         const isCompleted = match.status === MatchStatus.Completed || match.status.startsWith('Walkover') || match.status === MatchStatus.Disqualified;
 

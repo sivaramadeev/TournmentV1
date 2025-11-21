@@ -92,8 +92,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
                         Category: f.category,
                         Type: f.type,
                         Group: g.name,
-                        Player1: playerMap.get(m.player1Id) || 'N/A',
-                        Player2: playerMap.get(m.player2Id) || 'N/A',
+                        Player1: (m.player1Id ? playerMap.get(m.player1Id) : null) || 'N/A',
+                        Player2: (m.player2Id ? playerMap.get(m.player2Id) : null) || 'N/A',
                         ScoreP1: m.scoreP1 ?? '',
                         ScoreP2: m.scoreP2 ?? '',
                         Status: m.status

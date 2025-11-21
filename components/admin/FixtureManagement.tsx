@@ -105,7 +105,6 @@ const FixtureManagement: React.FC<FixtureManagementProps> = ({ tournament, setTo
             return `Round of ${Math.pow(2, roundsFromFinal + 1)}`;
         };
 
-        let matchIdCounter = 0;
         const roundMatches: Match[][] = [];
 
         // Generate empty matches for all rounds
