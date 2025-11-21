@@ -44,6 +44,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
             onSyncComplete(gistId);
             
             // Generate the link based on current location
+            // Use window.location.origin and pathname to strip existing params
             const baseUrl = window.location.origin + window.location.pathname;
             setGeneratedLink(`${baseUrl}?data=${gistId}`);
         } catch (err: any) {
@@ -69,22 +70,27 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
                 <div className="p-6 space-y-4">
                     {!generatedLink ? (
                         <>
-                            <p className="text-sm text-gray-300">
-                                To share this tournament globally, you need a <strong>GitHub Personal Access Token</strong>. 
-                                This will save the data to a public Gist on your GitHub account.
-                            </p>
+                             <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-600 text-sm space-y-3">
+                                <p className="font-bold text-gray-200">Instructions:</p>
+                                <ol className="list-decimal list-inside text-gray-400 space-y-2">
+                                    <li>
+                                        <a 
+                                            href="https://github.com/settings/tokens/new?scopes=gist&description=Tournament+Manager+Sync" 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="text-brand-primary hover:text-brand-secondary underline font-medium"
+                                        >
+                                            Click here to get a GitHub Token
+                                        </a>
+                                        <span className="block text-xs text-gray-500 ml-4 mt-1">Login to GitHub, scroll to bottom, click "Generate token".</span>
+                                    </li>
+                                    <li>Copy the token (starts with <code className="bg-gray-800 px-1 rounded">ghp_</code>).</li>
+                                    <li>Paste it in the box below.</li>
+                                </ol>
+                            </div>
+
                             <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-xs font-medium text-gray-400">GitHub Token</label>
-                                    <a 
-                                        href="https://github.com/settings/tokens/new?scopes=gist&description=Tournament+Manager+Sync" 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-brand-primary hover:text-brand-secondary underline"
-                                    >
-                                        Get Token (Select 'gist')
-                                    </a>
-                                </div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1">Paste Token Here</label>
                                 <input 
                                     type="password" 
                                     value={token}
@@ -101,7 +107,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
                                     onChange={(e) => setSaveToken(e.target.checked)}
                                     className="h-4 w-4 text-brand-primary bg-gray-700 border-gray-600 rounded focus:ring-brand-primary"
                                 />
-                                <label htmlFor="saveToken" className="ml-2 text-sm text-gray-400">Remember my token for future syncs</label>
+                                <label htmlFor="saveToken" className="ml-2 text-sm text-gray-400">Remember my token</label>
                             </div>
 
                             {error && <p className="text-red-400 text-sm bg-red-900/20 p-2 rounded border border-red-800">{error}</p>}
@@ -140,16 +146,15 @@ const ShareModal: React.FC<ShareModalProps> = ({ tournament, onClose, onSyncComp
                                     </button>
                                 </div>
                             </div>
-                            <div className="text-xs text-gray-500 space-y-1">
-                                <p>1. Send this link to players to view matches on mobile.</p>
-                                <p>2. Players can refresh their page to see live updates.</p>
-                                <p>3. <strong>Important:</strong> To update scores, come back here and click "Sync" again.</p>
+                            <div className="text-xs text-gray-500 bg-gray-900 p-3 rounded space-y-2">
+                                <p>✅ <strong>Send this link</strong> to players. They will see the live tournament.</p>
+                                <p>🔄 <strong>To Update Scores:</strong> Just make changes and click "Cloud Sync" &gt; "Sync Again". No need to send a new link.</p>
                             </div>
                             <button 
                                 onClick={() => { setGeneratedLink(''); }}
-                                className="w-full mt-2 py-2 text-sm text-gray-400 hover:text-white"
+                                className="w-full mt-2 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 rounded hover:bg-gray-700"
                             >
-                                Sync Again
+                                Sync Again (Update Data)
                             </button>
                         </div>
                     )}

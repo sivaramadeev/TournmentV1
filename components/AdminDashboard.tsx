@@ -88,12 +88,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
         tournament.fixtures.forEach(f => {
             f.groups.forEach(g => {
                 g.matches.forEach(m => {
+                    const p1Name = m.player1Id ? playerMap.get(m.player1Id) : null;
+                    const p2Name = m.player2Id ? playerMap.get(m.player2Id) : null;
+
                     data.push({
                         Category: f.category,
                         Type: f.type,
                         Group: g.name,
-                        Player1: (m.player1Id ? playerMap.get(m.player1Id) : null) || 'N/A',
-                        Player2: (m.player2Id ? playerMap.get(m.player2Id) : null) || 'N/A',
+                        Player1: p1Name || 'N/A',
+                        Player2: p2Name || 'N/A',
                         ScoreP1: m.scoreP1 ?? '',
                         ScoreP2: m.scoreP2 ?? '',
                         Status: m.status
@@ -129,9 +132,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ tournament, setTourname
                     </h2>
                     <button 
                         onClick={() => setShowShareModal(true)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-md transition-colors border border-indigo-500"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-md transition-colors border border-indigo-500 shadow-md"
                     >
-                        ☁ Cloud Sync
+                        ☁ Cloud Sync & Share
                     </button>
                 </div>
             </div>
